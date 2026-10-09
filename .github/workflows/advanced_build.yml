@@ -17,7 +17,7 @@ on:
         description: "Kernel branch"
         required: false
         type: string
-        default: "builder"
+        default: "codelinaro"
       kernelDevice:
         description: "Device (used for defconfig)"
         required: true
@@ -147,12 +147,12 @@ jobs:
           -e '/^MODULES_LIST=/d' \
          ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64
 
-      - name: 📐 Setup SWAP 20GB
+      - name: "📐 Setup SWAP 20GB"
         uses: pierotofy/set-swap-space@master
         with:
             swap-size-gb: 20
             
-      - name: 📐 Tune Swap
+      - name: "📐 Tune Swap"
         run: |
             echo "vm.swappiness=80" | sudo tee -a /etc/sysctl.conf
             sudo sysctl -p
