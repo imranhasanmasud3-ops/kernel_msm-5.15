@@ -49,6 +49,7 @@ jobs:
           echo "kernelName=kernel_msm-5.15" >> $GITHUB_ENV
           echo "DEFCONFIG_NAME=${{ github.event.inputs.kernelDevice }}_defconfig" >> $GITHUB_ENV
           echo "KERNEL_VERSION=5.15" >> $GITHUB_ENV
+          echo "CLANG_PATH=$PWD/proton-clang/bin" >> $GITHUB_ENV
           echo "ZIP_NAME=AnyKernel3-${{ github.event.inputs.kernelDevice }}-$(date +%Y%m%d).zip" >> $GITHUB_ENV
 
       - name: 📥 Clone kernel source
@@ -109,7 +110,7 @@ jobs:
 
       - name: 🔧 Setup Build Tools
         run: |
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git ${{ env.CLANG_PATH }} || true
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git proton-clang || true
           echo "CLANG_PATH=$PWD/proton-clang/bin" >> $GITHUB_ENV
           echo "$PWD/proton-clang/bin" >> $GITHUB_PATH
           export PATH="$PWD/proton-clang/bin:$PATH"
