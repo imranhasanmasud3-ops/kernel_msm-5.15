@@ -12,27 +12,27 @@ on:
         required: true
         default: 'chickernel'
       kernelDevice:
-        description: 'Device name for defconfig'
+        description: 'Device name'
         required: true
         default: 'tapas'
       localVersion:
-        description: 'Custom version suffix'
+        description: 'Version suffix'
         required: false
         default: ''
       buildKSU:
-        description: 'Include KernelSU variant'
+        description: 'Include KernelSU'
         required: true
         default: 'true'
       LTOOptimizations:
-        description: 'LTO mode (thin/full/none)'
+        description: 'LTO mode'
         required: true
         default: 'thin'
       optimizationLevel:
-        description: 'Optimization level (O2/O3)'
+        description: 'Optimization level'
         required: true
         default: 'O2'
       buildToolchains:
-        description: 'Build toolchains (custom-tools/gcc)'
+        description: 'Build toolchains'
         required: true
         default: 'custom-tools'
 
@@ -88,6 +88,8 @@ jobs:
           echo "CONFIG_WEXT_PROC=y" >> "$CONFIG_FILE"
           echo "CONFIG_WEXT_SPY=y" >> "$CONFIG_FILE"
           echo "CONFIG_MAC80211_DEBUGFS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_GKI=y" >> "$CONFIG_FILE"
+          echo "CONFIG_MODULES=y" >> "$CONFIG_FILE"
 
           mkdir -p firmware
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2870.bin -O firmware/rt2870.bin || true
@@ -137,6 +139,15 @@ jobs:
       - name: Create AnyKernel3 ZIP
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3 || true
+          cd AnyKernel3
+          sed -i 's/^block=.*/block=boot/' anykernel.sh
+          sed -i 's/^device.name1=.*/device.name1=tapas/' anykernel.sh
+          sed -i 's/^device.name2=.*/device.name2=topaz/' anykernel.sh
+          sed -i 's/^device.name3=.*/device.name3=sapphire/' anykernel.sh
+          sed -i 's/^device.name4=.*/device.name4=sapphiren/' anykernel.sh
+          sed -i 's/^is_slot_device=.*/is_slot_device=1/' anykernel.sh
+          sed -i 's/^ramdisk_compression=.*/ramdisk_compression=auto/' anykernel.sh
+          cd ..
           cp ./${{ env.kernelDir }}/${{ env.kernelName }}/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/ 2>/dev/null || \
           cp ./${{ env.kernelDir }}/${{ env.kernelName }}/out/arch/arm64/boot/Image.gz AnyKernel3/ 2>/dev/null || \
           cp ./${{ env.kernelDir }}/${{ env.kernelName }}/out/arch/arm64/boot/Image AnyKernel3/ 2>/dev/null || true
