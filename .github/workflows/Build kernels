@@ -51,16 +51,16 @@ jobs:
           echo "KERNEL_VERSION=5.15" >> $GITHUB_ENV
           echo "ZIP_NAME=AnyKernel3-${{ github.event.inputs.kernelDevice }}-$(date +%Y%m%d).zip" >> $GITHUB_ENV
 
-      - name: 📥 Clone kernel source
+      - name: Clone kernel source
         run: |
           git clone --depth=1 -b ${{ github.event.inputs.kernelBranch }} ${{ github.event.inputs.kernelSource }} ${{ env.kernelDir }}/${{ env.kernelName }}
 
-      - name: 🔧 Install dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc zip wget git
 
-      - name: 📥 Add NetHunter Wi-Fi Drivers
+      - name: Add NetHunter Wi-Fi Drivers
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
           git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git drivers/net/wireless/realtek/rtl8812au || true
@@ -93,12 +93,12 @@ jobs:
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2870.bin -O firmware/rt2870.bin || true
           wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/htc_9271.fw -O firmware/htc_9271.fw || true
 
-      - name: 🔧 Setup Clang
+      - name: Setup Clang
         run: |
           git clone --depth=1 https://github.com/kdrag0n/proton-clang.git proton-clang || true
           echo "$PWD/proton-clang/bin" >> $GITHUB_PATH
 
-      - name: 🛠️ Configure kernel
+      - name: Configure kernel
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
@@ -119,7 +119,7 @@ jobs:
           echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
           echo "CONFIG_OVERLAY_FS=y" >> "$CONFIG_FILE"
 
-      - name: 🔨 Build Kernel
+      - name: Build Kernel
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
           export PATH="$PWD/proton-clang/bin:$PATH"
@@ -134,7 +134,7 @@ jobs:
           make O=out ARCH=arm64 ${{ env.DEFCONFIG_NAME }} LLVM=1
           make -j$(nproc --all) O=out ARCH=arm64 LLVM=1
 
-      - name: 📦 Create AnyKernel3 ZIP
+      - name: Create AnyKernel3 ZIP
         run: |
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3 || true
           cp ./${{ env.kernelDir }}/${{ env.kernelName }}/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/ 2>/dev/null || \
@@ -143,7 +143,7 @@ jobs:
           cd AnyKernel3
           zip -r ../${{ env.ZIP_NAME }} .
 
-      - name: 📤 Upload Artifact
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ZIP_NAME }}
