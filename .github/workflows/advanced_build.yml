@@ -1,257 +1,189 @@
-name: "Advanced Build"
-
-env:
-  OUT_DIR: "out"
-  KERNEL_VERSION: "5.15"
-  ANDROID_VERSION: "13"
+name: Build kernels
 
 on:
   workflow_dispatch:
     inputs:
-      kernelSourceURL:
-        description: "Kernel source URL"
+      kernelSource:
+        description: 'Kernel source URL'
         required: true
-        type: string
-        default: "https://github.com"
+        default: 'https://github.com/topnotchfreaks/kernel_msm-5.15'
       kernelBranch:
-        description: "Kernel branch"
-        required: false
-        type: string
-        default: "codelinaro"
+        description: 'Kernel branch'
+        required: true
+        default: 'chickernel'
       kernelDevice:
-        description: "Device (used for defconfig)"
+        description: 'Device name for defconfig'
         required: true
-        type: string
-        default: "gki"
+        default: 'tapas'
       localVersion:
-        description: "Custom localversion name (e.g., -mybuild)"
+        description: 'Custom version suffix'
         required: false
-        type: string
-        default: ""
+        default: ''
       buildKSU:
-        description: "Build KSU variant?"
+        description: 'Include KernelSU variant'
         required: true
-        type: choice
-        default: "both"
-        options:
-          - "noksu"
-          - "ksu"
-          - "both"
-      tickRate:
-        description: "Kernel tick rate (Hz)"
-        required: false
-        type: choice
-        default: "250"
-        options:
-          - "default"
-          - "100Hz"
-          - "250Hz"
-          - "300Hz"
-          - "1000Hz"
+        default: 'true'
+      LTOOptimizations:
+        description: 'LTO mode (thin/full/none)'
+        required: true
+        default: 'thin'
       optimizationLevel:
-        description: "Compiler optimization level"
-        required: false
-        type: choice
-        default: "O2"
-        options:
-          - "default"
-          - "O2"
-          - "O3"
-          - "Os"
+        description: 'Optimization level (O2/O3)'
+        required: true
+        default: 'O2'
       buildToolchains:
-        description: "build tools"
+        description: 'Build toolchains (custom-tools/gcc)'
         required: true
-        type: choice
-        default: "android-tools"
-        options:
-          - "android-tools"
-          - "custom-tools"
-      LtoOptimizations:
-        description: "Choose LTO"
-        required: true
-        type: choice
-        default: "thin"
-        options:
-          - "thin"
-          - "full"
+        default: 'custom-tools'
 
 jobs:
-  Build-Kernel:
-    name: "🚀 Build Kernel"
+  build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        variant: ${{ fromJSON(
-          inputs.buildKSU == 'both' && '["noksu", "ksu"]' ||
-          inputs.buildKSU == 'ksu' && '["ksu"]' ||
-          '["noksu"]' ) }}
-    env:
-      kernelDir: common_${{ github.event.inputs.kernelDevice }}
-      kernelName: common
-      DEFCONFIG_NAME: ${{ github.event.inputs.kernelDevice }}_defconfig
-      WORK_DIR: ${{ github.workspace }}
-
     steps:
-      - name: "✨ Setup workspace"
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up environment
         run: |
-          mkdir -p $kernelDir
-          echo "BUILD_TIME=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
-          sudo apt-get update -qq
-          sudo apt-get install -y repo rsync aria2 build-essential bc curl flex cpio rsync git zip dwarves libelf-dev gcc-aarch64-linux-gnu libssl-dev python3 clang lld llvm llvm-dev
+          echo "kernelDir=kernel" >> $GITHUB_ENV
+          echo "kernelName=kernel_msm-5.15" >> $GITHUB_ENV
+          echo "DEFCONFIG_NAME=${{ github.event.inputs.kernelDevice }}_defconfig" >> $GITHUB_ENV
+          echo "KERNEL_VERSION=5.15" >> $GITHUB_ENV
+          echo "ZIP_NAME=AnyKernel3-${{ github.event.inputs.kernelDevice }}-$(date +%Y%m%d).zip" >> $GITHUB_ENV
 
-      - name: "🌟 Clone kernel source"
-        working-directory: ./${{ env.kernelDir }}
+      - name: 📥 Clone kernel source
         run: |
-          git clone --recursive --branch ${{ github.event.inputs.kernelBranch }} \
-            ${{ github.event.inputs.kernelSourceURL }} ${{ env.kernelName }} --depth=1
+          git clone --depth=1 -b ${{ github.event.inputs.kernelBranch }} ${{ github.event.inputs.kernelSource }} ${{ env.kernelDir }}/${{ env.kernelName }}
 
-      - name: "📥 Initialize repo"
-        if: github.event.inputs.buildToolchains == 'android-tools' || github.event.inputs.buildToolchains == 'custom-tools'
-        working-directory: ${{ env.WORK_DIR}}
+      - name: 🔧 Install dependencies
         run: |
-         repo init -u https://googlesource.com -b common-android13-5.15-lts --depth=1
-         repo sync --optimized-fetch --prune --no-clone-bundle --no-tags -j$(nproc --all)
-    
-         rm -rf .repo
-         rm -rf common
+          sudo apt-get update
+          sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev bc zip wget git
 
-         rm -rf prebuilts/clang/host/linux-x86
-         git clone --depth=1 --branch main-kernel \
-           https://googlesource.com \
-           prebuilts/clang/host/linux-x86
-
-         rm -rf prebuilts/clang/host/linux-x86/clang-3289846 \
-           prebuilts/clang/host/linux-x86/clang-r547379 \
-           prebuilts/clang/host/linux-x86/clang-r584948 \
-           prebuilts/clang/host/linux-x86/clang-r596125 \
-           prebuilts/clang/host/linux-x86/claang-r596125 \
-           prebuilts/clang/host/linux-x86/clang-stable
-
-         sed -i \
-          -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
-          -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r614650/' \
-         ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.constants
-    
-         sed -i '/^DEFCONFIG=gki_defconfig/d' ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki
-         sed -i '$a\DEFCONFIG=${{ env.DEFCONFIG_NAME }}' ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki
-         sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki
-
-         sed -i \
-          -e '/^KMI_SYMBOL_LIST_STRICT_MODE=/d' \
-          -e '/^TRIM_NONLISTED_KMI=/d' \
-          -e '/^KMI_ENFORCED=/d' \
-          -e '$a\KMI_SYMBOL_LIST_STRICT_MODE=0' \
-          -e '$a\TRIM_NONLISTED_KMI=0' \
-          -e '$a\KMI_ENFORCED=0' \
-          -e '/^MODULES_ORDER=/d' \
-          -e '/^MODULES_LIST=/d' \
-         ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64
-
-      - name: "📐 Setup SWAP 20GB"
-        uses: pierotofy/set-swap-space@master
-        with:
-            swap-size-gb: 20
-            
-      - name: "📐 Tune Swap"
-        run: |
-            echo "vm.swappiness=80" | sudo tee -a /etc/sysctl.conf
-            sudo sysctl -p
-
-      - name: "📝 Append custom Makefile line"
+      - name: 📥 Clone External Wi-Fi Drivers & Configure NetHunter Support
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
-         echo 'KBUILD_CFLAGS += -Wno-default-const-init-unsafe' >> Makefile
-         echo 'KBUILD_CFLAGS += -Wno-uninitialized-const-pointer' >> Makefile
-         echo 'KBUILD_CFLAGS += -Wno-implicit-function-declaration' >> Makefile
-         echo 'KBUILD_CFLAGS += -Wno-sometimes-uninitialized' >> Makefile
-    
-      - name: "⚙️ Configure kernel"
-        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
-        run: |
-         CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-    
-         sed -i '/^CONFIG_LTO_CLANG_FULL/d' "$CONFIG_FILE"
-    
-         if [ -n "${{ github.event.inputs.localVersion }}" ]; then
-          echo "CONFIG_LOCALVERSION=\"${{ github.event.inputs.localVersion }}\"" >> "$CONFIG_FILE"
-         fi
-    
-         if [ "${{ github.event.inputs.LtoOptimizations }}" = "thin" ]; then
-           sed -i '/CONFIG_LTO_CLANG_FULL/d' "$CONFIG_FILE"
-           echo "CONFIG_LTO_CLANG=y" >> "$CONFIG_FILE"
-           echo "# CONFIG_LTO_CLANG_FULL is not set" >> "$CONFIG_FILE"
-           echo "CONFIG_LTO_CLANG_THIN=y" >> "$CONFIG_FILE"
-           echo "CONFIG_THINLTO=y" >> "$CONFIG_FILE"
-         else
-           sed -i '/CONFIG_LTO_CLANG_FULL/d' "$CONFIG_FILE"
-           echo "CONFIG_LTO_CLANG=y" >> "$CONFIG_FILE"
-           echo "CONFIG_LTO_CLANG_FULL=y" >> "$CONFIG_FILE"
-           echo "# CONFIG_LTO_CLANG_THIN is not set" >> "$CONFIG_FILE"
-           echo "# CONFIG_THINLTO is not set" >> "$CONFIG_FILE"
-         fi
+          # ১. Realtek ড্রাইভার ক্লোন
+          git clone --depth=1 https://github.com/aircrack-ng/rtl8812au.git drivers/net/wireless/realtek/rtl8812au || true
+          git clone --depth=1 https://github.com/aircrack-ng/rtl8814au.git drivers/net/wireless/realtek/rtl8814au || true
+          git clone --depth=1 https://github.com/aircrack-ng/rtl8821au.git drivers/net/wireless/realtek/rtl8821au || true
 
-         echo "CONFIG_KALLSYMS=y" >> "$CONFIG_FILE"
-         echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG_FILE"
-         echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
-         echo "CONFIG_OVERLAY_FS=y" >> "$CONFIG_FILE"
+          # ২. কনফিগ ফাইলে ড্রাইভার যোগ
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           
-         sed -i '/CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE/d' "$CONFIG_FILE"
-         sed -i '/CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3/d' "$CONFIG_FILE"
-         sed -i '/CONFIG_CC_OPTIMIZE_FOR_SIZE/d' "$CONFIG_FILE"
+          # Ralink RT5370N (আপনার বর্তমান ডংগল)
+          echo "CONFIG_RT2800USB=m" >> "$CONFIG_FILE"
+          echo "CONFIG_RT2800USB_RT53XX=y" >> "$CONFIG_FILE"
+          echo "CONFIG_RT2800USB_RT33XX=y" >> "$CONFIG_FILE"
+          echo "CONFIG_RT2800USB_RT35XX=y" >> "$CONFIG_FILE"
+          
+          # MediaTek
+          echo "CONFIG_MT7601U=m" >> "$CONFIG_FILE"
+          echo "CONFIG_MT76x0U=m" >> "$CONFIG_FILE"
+          echo "CONFIG_MT76x2U=m" >> "$CONFIG_FILE"
+          
+          # Atheros AR9271
+          echo "CONFIG_ATH9K_HTC=m" >> "$CONFIG_FILE"
+          
+          # Realtek
+          echo "CONFIG_RTL8812AU=m" >> "$CONFIG_FILE"
+          echo "CONFIG_RTL8814AU=m" >> "$CONFIG_FILE"
+          echo "CONFIG_RTL8821AU=m" >> "$CONFIG_FILE"
+          
+          # Monitor Mode সাপোর্ট
+          echo "CONFIG_CFG80211=m" >> "$CONFIG_FILE"
+          echo "CONFIG_MAC80211=m" >> "$CONFIG_FILE"
+          echo "CONFIG_MAC80211_MESH=y" >> "$CONFIG_FILE"
+          echo "CONFIG_WIRELESS_EXT=y" >> "$CONFIG_FILE"
+          echo "CONFIG_WEXT_CORE=y" >> "$CONFIG_FILE"
+          echo "CONFIG_WEXT_PROC=y" >> "$CONFIG_FILE"
+          echo "CONFIG_WEXT_SPY=y" >> "$CONFIG_FILE"
+          echo "CONFIG_MAC80211_DEBUGFS=y" >> "$CONFIG_FILE"
+
+          # ৩. ফার্মওয়্যার ডাউনলোড
+          mkdir -p firmware
+          wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/rt2870.bin -O firmware/rt2870.bin || true
+          wget -q https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git/plain/htc_9271.fw -O firmware/htc_9271.fw || true
+
+          echo "✅ Wi-Fi drivers configured!"
+
+      - name: 🔧 Setup Build Tools
+        run: |
+          git clone --depth=1 https://github.com/kdrag0n/proton-clang.git ${{ env.CLANG_PATH }} || true
+          echo "CLANG_PATH=$PWD/proton-clang/bin" >> $GITHUB_ENV
+          echo "$PWD/proton-clang/bin" >> $GITHUB_PATH
+          export PATH="$PWD/proton-clang/bin:$PATH"
+          export CLANG_TRIPLE="aarch64-linux-gnu-"
+          export CC=clang
+          export AR=llvm-ar
+          export AS=llvm-as
+          export NM=llvm-nm
+          export OBJCOPY=llvm-objcopy
+          export OBJDUMP=llvm-objdump
+          export STRIP=llvm-strip
+          clang --version
+
+      - name: 🛠️ Configure kernel
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          sed -i '/CONFIG_LTO_CLANG_FULL/d' "$CONFIG_FILE"
+          
+          if [ "${{ github.event.inputs.localVersion }}" ]; then
+            echo "CONFIG_LOCALVERSION=\"${{ github.event.inputs.localVersion }}\"" >> "$CONFIG_FILE"
+          fi
+          
+          if [ "${{ github.event.inputs.LTOOptimizations }}" = "thin" ]; then
+            sed -i '/CONFIG_LTO_CLANG_FULL/d' "$CONFIG_FILE"
+            echo "CONFIG_LTO_CLANG=y" >> "$CONFIG_FILE"
+            echo "CONFIG_LTO_CLANG_THIN=y" >> "$CONFIG_FILE"
+            echo "CONFIG_THINLTO=y" >> "$CONFIG_FILE"
+          else
+            sed -i '/CONFIG_LTO_CLANG_FULL/d' "$CONFIG_FILE"
+            echo "CONFIG_LTO_CLANG=y" >> "$CONFIG_FILE"
+            echo "CONFIG_LTO_CLANG_FULL=y" >> "$CONFIG_FILE"
+          fi
+          
+          echo "CONFIG_KALLSYMS=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TMPFS_XATTR=y" >> "$CONFIG_FILE"
+          echo "CONFIG_TMPFS_POSIX_ACL=y" >> "$CONFIG_FILE"
+          echo "CONFIG_OVERLAY_FS=y" >> "$CONFIG_FILE"
+          
+          sed -i '/CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_CC_OPTIMIZE_FOR_SIZE/d' "$CONFIG_FILE"
           
           case "${{ github.event.inputs.optimizationLevel }}" in
-            default)
-              ;;
-            O2)
-              echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$CONFIG_FILE"
-              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3 is not set" >> "$CONFIG_FILE"
-              echo "# CONFIG_CC_OPTIMIZE_FOR_SIZE is not set" >> "$CONFIG_FILE"
-              ;;
-            O3)
-              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE is not set" >> "$CONFIG_FILE"
-              echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=y" >> "$CONFIG_FILE"
-              echo "# CONFIG_CC_OPTIMIZE_FOR_SIZE is not set" >> "$CONFIG_FILE"
-              ;;
-            Os)
-              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE is not set" >> "$CONFIG_FILE"
-              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3 is not set" >> "$CONFIG_FILE"
-              echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> "$CONFIG_FILE"
-              ;;
+            default) ;;
+            O2) echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$CONFIG_FILE" ;;
           esac
-                   
-          case "${{ github.event.inputs.tickRate }}" in
-            default)
-              ;;
-            100Hz)
-              sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_1000=/d' "$CONFIG_FILE"
-              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
-              echo "CONFIG_HZ=100" >> "$CONFIG_FILE"
-              echo "CONFIG_HZ_100=y" >> "$CONFIG_FILE"
-              ;;
-            250Hz)
-              sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_1000=/d' "$CONFIG_FILE"
-              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
-              echo "CONFIG_HZ=250" >> "$CONFIG_FILE"
-              echo "CONFIG_HZ_250=y" >> "$CONFIG_FILE"
-              ;;
-            300Hz)
-              sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_1000=/d' "$CONFIG_FILE"
-              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
-              echo "CONFIG_HZ=300" >> "$CONFIG_FILE"
-              echo "CONFIG_HZ_300=y" >> "$CONFIG_FILE"
-              ;;
-            1000Hz)
-              sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
-              sed -i '/^CONFIG_HZ_1000=/d' "$CONFIG_FILE"
-              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
+
+      - name: 🔨 Build Kernel
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+          export PATH="${{ env.CLANG_PATH }}:$PATH"
+          export CLANG_TRIPLE="aarch64-linux-gnu-"
+          export CC=clang
+          export AR=llvm-ar
+          export AS=llvm-as
+          export NM=llvm-nm
+          export OBJCOPY=llvm-objcopy
+          export OBJDUMP=llvm-objdump
+          export STRIP=llvm-strip
+          make O=out ARCH=arm64 ${{ env.DEFCONFIG_NAME }} LLVM=1
+          make -j$(nproc --all) O=out ARCH=arm64 LLVM=1
+
+      - name: 📦 Create AnyKernel3 ZIP
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3.git AnyKernel3 || true
+          cp ./${{ env.kernelDir }}/${{ env.kernelName }}/out/arch/arm64/boot/Image.gz-dtb AnyKernel3/ 2>/dev/null || \
+          cp ./${{ env.kernelDir }}/${{ env.kernelName }}/out/arch/arm64/boot/Image.gz AnyKernel3/ 2>/dev/null || \
+          cp ./${{ env.kernelDir }}/${{ env.kernelName }}/out/arch/arm64/boot/Image AnyKernel3/ 2>/dev/null || true
+          cd AnyKernel3
+          zip -r ../${{ env.ZIP_NAME }} .
+
+      - name: 📤 Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_NAME }}
+          retention-days: 7
