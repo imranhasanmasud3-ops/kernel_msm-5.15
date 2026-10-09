@@ -17,7 +17,7 @@ on:
         description: "Kernel branch"
         required: false
         type: string
-        default: "codelinaro"
+        default: "builder"
       kernelDevice:
         description: "Device (used for defconfig)"
         required: true
@@ -274,4 +274,3 @@ jobs:
               ;;
             O2)
               echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$CONFIG_FILE"
-              
